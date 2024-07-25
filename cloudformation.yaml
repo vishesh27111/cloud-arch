@@ -156,4 +156,4 @@ Outputs:
   ApiUrl:
     Description: 'API Gateway URL'
     Value:
-      Fn::Sub: 'https://${MyApiGateway}.execute-api.${AWS::Region}.amazonaws.com/dev/products'  #  update url
+      Fn::Sub: 'https://${MyApiGateway}.execute-api.${AWS::Region}.amazonaws.com/dev/all-products'  #  update url
