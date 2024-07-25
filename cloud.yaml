@@ -1,0 +1,182 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation template for Lambda, API Gateway, S3, DynamoDB, and Amplify
+
+Resources:
+  # Remove the EC2 Instance section
+
+  # S3 Bucket for Images
+  # MyS3Bucket:
+  #   Type: 'AWS::S3::Bucket'
+  #   Properties:
+  #     BucketName: 's3-mobile-images1'
+  #     Tags:
+  #       - Key: Name
+  #         Value: 'MyS3Bucket'
+
+  # DynamoDB Table
+  # MyDynamoDBTable:
+  #   Type: 'AWS::DynamoDB::Table'
+  #   Properties:
+  #     TableName: 'Mobiles'
+  #     AttributeDefinitions:
+  #       - AttributeName: 'id'
+  #         AttributeType: 'N'
+  #     KeySchema:
+  #       - AttributeName: 'id'
+  #         KeyType: 'HASH'
+  #     ProvisionedThroughput:
+  #       ReadCapacityUnits: 5
+  #       WriteCapacityUnits: 5
+  #     Tags:
+  #       - Key: Name
+  #         Value: 'MyDynamoDBTable'
+
+  # Lambda Function
+  MyLambdaFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: 'Fetch-Data'
+      Handler: 'index.handler'
+      Role: 'arn:aws:iam::685458129024:role/LabRole'  # Specify the existing IAM Role ARN
+      Code:
+        S3Bucket: 'buck-lamb'
+        S3Key: 'index.zip'
+      Runtime: 'nodejs20.x'
+  
+  # Invoke Permission
+  LambdaApiGatewayInvokePermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Ref MyLambdaFunction
+      Principal: 'apigateway.amazonaws.com'
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${MyApiGateway}/*/*/*'
+
+  # Gateway
+  MyApiGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: get-products
+      ApiKeySourceType: "HEADER"
+      EndpointConfiguration:
+        Types:
+          - "REGIONAL"
+
+  # Resource
+  MyApiGatewayResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      RestApiId: !Ref MyApiGateway
+      ParentId: !GetAtt [MyApiGateway, RootResourceId]
+      PathPart: 'all-products'
+  
+  # GET method
+  ApiGatewayMethodGetMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref MyApiGateway
+      ResourceId: !Ref MyApiGatewayResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      ApiKeyRequired: false
+      MethodResponses:
+        - StatusCode: "200"
+          ResponseModels:
+            "application/json": "Empty"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,token'"
+            method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+      Integration:
+        IntegrationHttpMethod: "POST"
+        Type: "AWS_PROXY"
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${MyLambdaFunction.Arn}/invocations'
+        PassthroughBehavior: "WHEN_NO_MATCH"
+        RequestTemplates:
+          application/json: '{}'
+        IntegrationResponses:
+          - StatusCode: '200'
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates: { }
+
+  # OPTIONS method
+  ApiGatewayOptionsMethod:
+    Type: 'AWS::ApiGateway::Method'
+    Properties:
+      AuthorizationType: 'NONE'
+      HttpMethod: 'OPTIONS'
+      ResourceId: !Ref MyApiGatewayResource
+      RestApiId: !Ref MyApiGateway
+      Integration:
+        Type: 'MOCK'
+        IntegrationResponses:
+          - StatusCode: '200'
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: '{"statusCode": 200}'  #  #  Integration Response - Mapping template
+        RequestTemplates: 
+            application/json: '{"statusCode": 200}'  #  Integration Request - Mapping template
+      MethodResponses:
+        - StatusCode: '200' 
+          ResponseModels:
+            "application/json": "Empty"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+            method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+            method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+
+  # Deployment Stages
+  ApiGatewayDeployment:
+    Type: 'AWS::ApiGateway::Deployment'
+    Properties:
+      RestApiId: !Ref MyApiGateway
+      StageName: 'dev'
+    DependsOn: [ApiGatewayMethodGetMethod, ApiGatewayOptionsMethod]  # mention all methods
+
+  # Amplify App
+  MyAmplifyApp:
+    Type: AWS::Amplify::App
+    Properties:
+      Name: 'MyReactApp'
+      Repository: 'https://github.com/my-github-username/my-repo'  # Update with your repository URL
+      OauthToken: '{{resolve:secretsmanager:my-github-token:SecretString:token}}'
+      BuildSpec: |
+        version: 1
+        frontend:
+          phases:
+            preBuild:
+              commands:
+                - npm install
+            build:
+              commands:
+                - npm run build
+          artifacts:
+            baseDirectory: build
+            files:
+              - '**/*'
+          cache:
+            paths:
+              - node_modules/**/*
+
+  MyAmplifyBranch:
+    Type: AWS::Amplify::Branch
+    Properties:
+      AppId: !Ref MyAmplifyApp
+      BranchName: 'main'
+
+Outputs:
+  ApiUrl:
+    Description: 'API Gateway URL'
+    Value:
+      Fn::Sub: 'https://${MyApiGateway}.execute-api.${AWS::Region}.amazonaws.com/dev/products'  #  update url
+
+  AmplifyAppUrl:
+    Description: 'Amplify App URL'
+    Value:
+      Fn::GetAtt: [MyAmplifyBranch, WebhookUrl]
