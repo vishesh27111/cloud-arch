@@ -1,28 +1,5 @@
-import AWS from 'aws-sdk';
-
-AWS.config.update({
-  region: 'us-east-1'
-});
-
-const ssm = new AWS.SSM();
-
-export const fetchApiUrl = async () => {
-  const params = {
-    Name: '/my-app/api-url',
-    WithDecryption: true
-  };
-
-  try {
-    const response = await ssm.getParameter(params).promise();
-    return response.Parameter.Value;
-  } catch (error) {
-    console.error('Error fetching parameter:', error);
-    throw error;
-  }
-};
-
 export const fetchProducts = async () => {
-  const API_ENDPOINT = await fetchApiUrl();
+  const API_ENDPOINT = "https://mrgueq751j.execute-api.us-east-1.amazonaws.com/dev/all-products";
   try {
     const response = await fetch(API_ENDPOINT, {
       method: 'GET',
