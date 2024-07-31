@@ -1,5 +1,5 @@
 export const fetchProducts = async () => {
-  const API_ENDPOINT = "https://7gy6ceelbb.execute-api.us-east-1.amazonaws.com/dev/all-products";
+  const API_ENDPOINT = "https://wwlvp8jr14.execute-api.us-east-1.amazonaws.com/dev/all-products";
   try {
     const response = await fetch(API_ENDPOINT, {
       method: 'GET',
