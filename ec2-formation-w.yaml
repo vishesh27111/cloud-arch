@@ -1,0 +1,489 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: 'EC2 Instance with React App Deployment'
+
+Resources:
+  MyVPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: '10.0.0.0/16'
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: 'Term-VPC'
+
+  # Internet Gateway
+  MyInternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: 'MyInternetGateway'
+
+  AttachGateway:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref MyVPC
+      InternetGatewayId: !Ref MyInternetGateway
+
+  # Public Subnets
+  PublicSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: '10.0.1.0/24'
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: 'PublicSubnet1'
+
+  PublicSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: '10.0.3.0/24'
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: 'PublicSubnet2'
+
+  # Private Subnets
+  # PrivateSubnet1:
+  #   Type: 'AWS::EC2::Subnet'
+  #   Properties:
+  #     VpcId: !Ref MyVPC
+  #     CidrBlock: '10.0.2.0/24'
+  #     MapPublicIpOnLaunch: false
+  #     AvailabilityZone: !Select [ 0, !GetAZs '' ]
+  #     Tags:
+  #       - Key: Name
+  #         Value: 'PrivateSubnet1'
+
+  # PrivateSubnet2:
+  #   Type: 'AWS::EC2::Subnet'
+  #   Properties:
+  #     VpcId: !Ref MyVPC
+  #     CidrBlock: '10.0.4.0/24'
+  #     MapPublicIpOnLaunch: false
+  #     AvailabilityZone: !Select [ 1, !GetAZs '' ]
+  #     Tags:
+  #       - Key: Name
+  #         Value: 'PrivateSubnet2'
+
+  # Route Table for Public Subnet
+  PublicRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref MyVPC
+      Tags:
+        - Key: Name
+          Value: 'PublicRouteTable'
+
+  PublicRoute:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref MyInternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  # Route Table for Private Subnet
+  # PrivateRouteTable:
+  #   Type: 'AWS::EC2::RouteTable'
+  #   Properties:
+  #     VpcId: !Ref MyVPC
+  #     Tags:
+  #       - Key: Name
+  #         Value: 'PrivateRouteTable'
+
+  # PrivateSubnet1RouteTableAssociation:
+  #   Type: 'AWS::EC2::SubnetRouteTableAssociation'
+  #   Properties:
+  #     SubnetId: !Ref PrivateSubnet1
+  #     RouteTableId: !Ref PrivateRouteTable
+
+  # PrivateSubnet2RouteTableAssociation:
+  #   Type: 'AWS::EC2::SubnetRouteTableAssociation'
+  #   Properties:
+  #     SubnetId: !Ref PrivateSubnet2
+  #     RouteTableId: !Ref PrivateRouteTable
+
+  # NAT Gateway
+  # NatEIP:
+  #   Type: 'AWS::EC2::EIP'
+  #   DependsOn: AttachGateway
+  #   Properties:
+  #     Domain: 'vpc'
+
+  # NatGateway:
+  #   Type: 'AWS::EC2::NatGateway'
+  #   Properties:
+  #     AllocationId: !GetAtt NatEIP.AllocationId
+  #     SubnetId: !Ref PublicSubnet1
+  #     Tags:
+  #       - Key: Name
+  #         Value: 'NatGateway'
+
+  # PrivateRoute:
+  #   Type: 'AWS::EC2::Route'
+  #   Properties:
+  #     RouteTableId: !Ref PrivateRouteTable
+  #     DestinationCidrBlock: '0.0.0.0/0'
+  #     NatGatewayId: !Ref NatGateway
+
+  # Security Group
+  MySecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: 'Allow SSH and HTTP access'
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: 'tcp'
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: '142.134.20.77/24'  # Replace with your IP range
+        - IpProtocol: 'tcp'
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: '18.206.107.24/29'  # EC2 Instance Connect service IP range
+        - IpProtocol: 'tcp'
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: '0.0.0.0/0'
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          FromPort: '0'
+          ToPort: '0'
+          CidrIp: '0.0.0.0/0'
+      Tags:
+        - Key: Name
+          Value: 'MySecurityGroup'
+
+  # Load Balancer
+  MyLoadBalancer:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Name: 'MyLoadBalancer'
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      SecurityGroups:
+        - !Ref MySecurityGroup
+      Scheme: 'internet-facing'
+      LoadBalancerAttributes:
+        - Key: 'deletion_protection.enabled'
+          Value: 'false'
+        - Key: 'idle_timeout.timeout_seconds'
+          Value: '60'
+      Tags:
+        - Key: Name
+          Value: 'MyLoadBalancer'
+
+  LoadBalancerListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - Type: 'forward'
+          TargetGroupArn: !Ref MyTargetGroup
+      LoadBalancerArn: !Ref MyLoadBalancer
+      Port: 80
+      Protocol: 'HTTP'
+
+  MyTargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      Name: 'MyTargetGroup'
+      HealthCheckIntervalSeconds: 30
+      HealthCheckProtocol: 'HTTP'
+      HealthCheckTimeoutSeconds: 5
+      HealthCheckPath: '/'
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 2
+      Port: 80
+      Protocol: 'HTTP'
+      VpcId: !Ref MyVPC
+      TargetType: 'instance'
+
+  MyEC2Instance: 
+    Type: AWS::EC2::Instance
+    Properties:
+      Tags:
+      - Key: Name
+        Value: 'App'
+      KeyName: e-com-key
+      ImageId: ami-0a38c1c38a15fed74
+      InstanceType: 't3.micro'
+      Monitoring: true
+      SecurityGroupIds:
+      - !Ref MySecurityGroup
+      SubnetId: !Ref PublicSubnet1
+      # BlockDeviceMappings:
+      # -
+      #   DeviceName: "/dev/sda1"
+      #   Ebs:
+      #     Encrypted: false
+      #     VolumeSize: 16
+      #     SnapshotId: "snap-0d4808a4a367518ba"
+      #     VolumeType: "gp3"
+      #     DeleteOnTermination: true
+      HibernationOptions:
+        Configured: false
+      # CpuOptions:
+      #   CoreCount: 1
+      #   ThreadsPerCore: 2
+      EnclaveOptions:
+        Enabled: false
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # Update the package index
+          sudo yum update -y
+          
+          # Install Node.js, npm, and Git
+          sudo amazon-linux-extras install -y epel
+          sudo yum install -y nodejs npm git nginx
+
+          # Configure Nginx
+          sudo mkdir -p /var/www/html/frontend
+          echo 'server {
+            listen 80;
+            listen [::]:80;
+            root /var/www/html/frontend/build;
+
+            # React app
+            location / {
+              try_files $uri /index.html;
+            }
+          }' | sudo tee /etc/nginx/conf.d/react.conf >/dev/null
+
+          # Clone the repository and build the project
+          cd /home/ec2-user
+          git clone https://github.com/vishesh27111/cloud-arch.git
+          cd cloud-arch
+          npm install
+          npm run build
+          sudo cp -R build/ /var/www/html/frontend/
+          
+          # Update Nginx configuration and restart the service
+          echo '
+          user nginx;
+          worker_processes auto;
+          pid /run/nginx.pid;
+          include /etc/nginx/modules-enabled/*.conf;
+
+          events {
+            worker_connections 768;
+          }
+
+          http {
+            sendfile on;
+            tcp_nopush on;
+            tcp_nodelay on;
+            keepalive_timeout 65;
+            types_hash_max_size 2048;
+
+            include /etc/nginx/mime.types;
+            default_type application/octet-stream;
+
+            ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3; # Dropping SSLv3, ref: POODLE
+            ssl_prefer_server_ciphers on;
+
+            access_log /var/log/nginx/access.log;
+            error_log /var/log/nginx/error.log;
+
+            gzip on;
+
+            include /etc/nginx/conf.d/*.conf;
+          }' | sudo tee /etc/nginx/nginx.conf >/dev/null
+          sudo systemctl enable nginx
+          sudo systemctl start nginx
+
+  SNSTopic:
+    Type: 'AWS::SNS::Topic'
+    Properties:
+      DisplayName: 'AlarmNotifications'
+
+  SNSSubscription:
+    Type: 'AWS::SNS::Subscription'
+    Properties:
+      Protocol: 'email'
+      Endpoint: 'vs263774@dal.ca' 
+      TopicArn: !Ref SNSTopic
+
+  EC2CPUUtilizationAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmName: 'EC2-CPU-Utilization-High'
+      AlarmDescription: 'Alarm when EC2 CPU Utilization exceeds 80%'
+      Namespace: 'AWS/EC2'
+      MetricName: 'CPUUtilization'
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref MyEC2Instance
+      Statistic: 'Average'
+      Period: '120'
+      EvaluationPeriods: '1'
+      Threshold: '60'
+      ComparisonOperator: 'GreaterThanThreshold'
+      AlarmActions:
+        - !Ref SNSTopic
+      OKActions:
+        - !Ref SNSTopic
+      InsufficientDataActions:
+        - !Ref SNSTopic
+
+  ASGAverageCPUUtilizationAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmName: 'ASG-CPU-Utilization-High'
+      AlarmDescription: 'Alarm when Auto Scaling Group average CPU utilization exceeds 60%'
+      Namespace: 'AWS/EC2'
+      MetricName: 'CPUUtilization'
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref AutoScalingGroup
+      Statistic: 'Average'
+      Period: '120'
+      EvaluationPeriods: '1'
+      Threshold: '60'
+      ComparisonOperator: 'GreaterThanThreshold'
+      AlarmActions:
+        - !Ref SNSTopic
+      OKActions:
+        - !Ref SNSTopic
+      InsufficientDataActions:
+        - !Ref SNSTopic
+
+
+  # Auto Scaling Group
+  AutoScalingGroup:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      VPCZoneIdentifier:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      LaunchConfigurationName: !Ref LaunchConfiguration
+      MinSize: '1'
+      MaxSize: '5'
+      DesiredCapacity: '1'
+      TargetGroupARNs:
+        - !Ref MyTargetGroup
+      Tags:
+        - Key: Name
+          Value: 'AutoScalingGroup'
+          PropagateAtLaunch: 'true'
+
+  LaunchConfiguration:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
+    Properties:
+      ImageId: 'ami-0a38c1c38a15fed74'  # Update with your desired AMI ID
+      InstanceType: 't3.micro'
+      KeyName: 'e-com-key'  # Specify your EC2 key pair
+      SecurityGroups:
+        - !Ref MySecurityGroup
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          # Update the package index
+          sudo yum update -y
+          
+          # Install Node.js, npm, and Git
+          sudo amazon-linux-extras install -y epel
+          sudo yum install -y nodejs npm git nginx
+
+          # Configure Nginx
+          sudo mkdir -p /var/www/html/frontend
+          echo 'server {
+            listen 80;
+            listen [::]:80;
+            root /var/www/html/frontend/build;
+
+            # React app
+            location / {
+              try_files $uri /index.html;
+            }
+          }' | sudo tee /etc/nginx/conf.d/react.conf >/dev/null
+
+          # Clone the repository and build the project
+          cd /home/ec2-user
+          git clone https://github.com/vishesh27111/cloud-arch.git
+          cd cloud-arch
+          npm install
+          npm run build
+          sudo cp -R build/ /var/www/html/frontend/
+          
+          # Update Nginx configuration and restart the service
+          echo '
+          user nginx;
+          worker_processes auto;
+          pid /run/nginx.pid;
+          include /etc/nginx/modules-enabled/*.conf;
+
+          events {
+            worker_connections 768;
+          }
+
+          http {
+            sendfile on;
+            tcp_nopush on;
+            tcp_nodelay on;
+            keepalive_timeout 65;
+            types_hash_max_size 2048;
+
+            include /etc/nginx/mime.types;
+            default_type application/octet-stream;
+
+            ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3; # Dropping SSLv3, ref: POODLE
+            ssl_prefer_server_ciphers on;
+
+            access_log /var/log/nginx/access.log;
+            error_log /var/log/nginx/error.log;
+
+            gzip on;
+
+            include /etc/nginx/conf.d/*.conf;
+          }' | sudo tee /etc/nginx/nginx.conf >/dev/null
+          sudo systemctl enable nginx
+          sudo systemctl start nginx
+
+  ScalingPolicyHighCPU:
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      PolicyType: 'TargetTrackingScaling'
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: 'ASGAverageCPUUtilization'
+        TargetValue: 60.0
+  
+  # # Backup Plan (for EC2) 
+
+  BackupVault:
+    Type: 'AWS::Backup::BackupVault'
+    Properties:
+      BackupVaultName: 'MyBackupVault'
+
+  DynamoDBSnapshotPolicy:
+    Type: 'AWS::Backup::BackupPlan'
+    Properties:
+      BackupPlan:
+        BackupPlanName: 'DynamoDBBackupPlan'
+        BackupPlanRule:
+          - RuleName: 'DailyDynamoDBBackup'
+            TargetBackupVault: !Ref BackupVault
+            ScheduleExpression: 'cron(0 0 * * ? *)'
+            StartWindowMinutes: 60
+            CompletionWindowMinutes: 180
